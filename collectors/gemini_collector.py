@@ -1,105 +1,78 @@
 import os
-import json
-import random
 import time
+import json
+from google.colab import drive
 from datetime import datetime
+from tqdm import tqdm
+import google.generativeai as genai
+import google.api_core.exceptions as gexc
 
-# Optional: For Google Colab Drive mounting
-try:
-    import google.colab
-    from google.colab import drive
+# ✅ Mount Google Drive
+if not os.path.exists('/content/drive'):
+    print("⛔ Drive not available, make sure you're in Colab.")
+else:
     drive.mount('/content/drive')
-    SAVE_PATH = "/content/drive/MyDrive/aigen/daily_dumps"
-    print("✅ Running in Colab, Drive mounted.")
-except ImportError:
-    SAVE_PATH = "./daily_dumps"
-    print("⚠️ Not in Colab, saving locally.")
+    print("✅ Google Drive mounted.")
 
-# Install/Import Google Gemini SDK
-try:
-    import google.generativeai as genai
-except ImportError:
-    print("Installing google-generativeai...")
-    os.system("pip install --upgrade google-generativeai")
-    import google.generativeai as genai
-
-# Rotate multiple API keys
+# 🔑 Your API keys
 API_KEYS = [
     "AIzaSyBmCTbbAZLWB30sJBpo5PrXCEVWFaBpzcA",
     "AIzaSyDxO8BQjC_z4rS2V6tI5iyHAF-pAFzIj14"
 ]
-genai.configure(api_key=random.choice(API_KEYS))
 
-# Use updated Gemini model
-MODEL_NAME = "models/gemini-1.5-pro"
+# 📁 Output directory
+output_dir = '/content/drive/MyDrive/aigen_collector_output'
+os.makedirs(output_dir, exist_ok=True)
 
-# Generate diverse prompts
-def generate_prompt():
-    level = random.choice(["easy", "medium", "hard", "tricky", "technical", "creative"])
-    topic = random.choice([
-        "AI", "Machine Learning", "Ethics", "Philosophy", "Mathematics", "Programming",
-        "Data Structures", "Startups", "History", "Space", "Cybersecurity", "Logic", "Python"
-    ])
-    return f"Give a {level} question and answer on {topic} suitable for training an AI model. Format like:\nQuestion: ...\nAnswer: ..."
-
-# Extract Q/A from text
-def parse_response(text):
+def try_with_key(api_key, prompt):
     try:
-        lines = text.strip().splitlines()
-        q = next((l for l in lines if l.lower().startswith("question:")), None)
-        a = next((l for l in lines if l.lower().startswith("answer:")), None)
-        if q and a:
-            return {
-                "question": q[len("Question:"):].strip(),
-                "answer": a[len("Answer:"):].strip()
-            }
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel('gemini-1.5-pro')
+        response = model.generate_content(prompt)
+        return response.text.strip()
+    except gexc.ResourceExhausted as e:
+        print(f"❌ Quota exceeded for key: {api_key}")
+        raise e
     except Exception as e:
-        print("❌ Parse error:", e)
-    return None
+        print(f"⚠️ Error with key {api_key}: {e}")
+        raise e
 
-# Call Gemini API
-def fetch_qa(prompt, retries=3):
-    for _ in range(retries):
-        try:
-            model = genai.GenerativeModel(MODEL_NAME)
-            response = model.generate_content(prompt)
-            if response and response.text:
-                return parse_response(response.text)
-        except Exception as e:
-            print("⚠️ Error:", e)
-            time.sleep(2)
-    return None
+def collect(n=10, delay=2):
+    results = []
+    current_key_index = 0
+    total_keys = len(API_KEYS)
 
-# Collect dataset
-def collect(n=1000):
-    dataset = []
-    for i in range(n):
-        prompt = generate_prompt()
-        qa = fetch_qa(prompt)
-        if qa:
-            dataset.append(qa)
-            print(f"✅ {i+1}/{n} collected")
-        else:
-            print(f"❌ Failed {i+1}/{n}")
-        time.sleep(random.uniform(1.1, 1.9))
-    return dataset
+    for i in tqdm(range(n), desc="🔄 Collecting"):
+        prompt = f"Generate a short creative writing prompt {i + 1}"
+        success = False
 
-# Save to file
-def save_dataset(data):
-    if not data:
-        print("⚠️ Nothing to save.")
-        return
-    os.makedirs(SAVE_PATH, exist_ok=True)
-    fname = datetime.now().strftime("%Y-%m-%d") + ".json"
-    fpath = os.path.join(SAVE_PATH, fname)
-    try:
-        with open(fpath, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2, ensure_ascii=False)
-        print(f"📁 Saved {len(data)} Q&A pairs to {fpath}")
-    except Exception as e:
-        print(f"❌ Save failed: {e}")
+        for attempt in range(total_keys):
+            key = API_KEYS[current_key_index]
+            try:
+                text = try_with_key(key, prompt)
+                results.append({'id': i + 1, 'prompt': prompt, 'response': text})
+                success = True
+                break
+            except gexc.ResourceExhausted:
+                current_key_index = (current_key_index + 1) % total_keys
+                time.sleep(1)
+            except Exception as e:
+                print(f"❌ Unhandled error: {e}")
+                break
 
-# Main runner
-if __name__ == "__main__":
-    data = collect(1000)
-    save_dataset(data)
+        if not success:
+            results.append({'id': i + 1, 'prompt': prompt, 'response': None, 'error': 'All keys failed'})
+        time.sleep(delay)
+
+    return results
+
+# ✅ Start collecting
+data = collect(n=10, delay=2)
+
+# ✅ Save to Drive
+timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+output_path = os.path.join(output_dir, f'gemini_collected_{timestamp}.json')
+with open(output_path, 'w') as f:
+    json.dump(data, f, indent=2)
+
+print(f"\n✅ Saved {len(data)} items to:\n{output_path}")
