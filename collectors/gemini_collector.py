@@ -20,7 +20,7 @@ MODEL_NAME = "gemini-1.5-pro"
 TEMPERATURE = 0.8
 MAX_RETRIES = 3
 RETRY_SLEEP = 2
-SAVE_BASE = "/content/drive/MyDrive/aigen/daily_dumps"
+SAVE_BASE = "/home/ais/aigen_dumps"
 
 # Set the Gemini API key from config
 
