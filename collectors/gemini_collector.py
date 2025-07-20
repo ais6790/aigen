@@ -14,7 +14,7 @@ except ImportError:
 # CONFIG
 API_KEYS = {
     "key1": "AIzaSyC_meFvwj7O-r_vH-s9OaM8VnLGUFY1478",
-    "key2": "AIzaSyDxO8BQjC_z4rS2V6tI5iyHAF-pAFzIj14"
+    "key2": "AIzaSyAznXRjbXnLDrvdzyXyhwIUeKJdSSnoLlI"
 }
 MODEL_NAME = "gemini-1.5-pro"
 TEMPERATURE = 0.8
