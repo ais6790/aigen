@@ -77,27 +77,35 @@ def split_qa(text):
         }
     return None
 
-# Collect and deduplicate QA pairs
+# Collect and deduplicate QA pairs with retry logic
 
 def collect(key_name, count=1000):
     print(f"\n🚀 Collecting {count} QA pairs using {key_name}...")
     set_api_key(key_name)
     qa_pairs = []
     seen_questions = set()
+    attempts = 0
+    max_attempts = count * 5  # safety cap
 
-    for i in range(count):
+    while len(qa_pairs) < count and attempts < max_attempts:
         prompt = generate_self_prompt()
         output = fetch_qa(prompt)
+        attempts += 1
+
         if output:
             qa = split_qa(output)
             if qa and qa['question'] not in seen_questions:
                 qa_pairs.append(qa)
                 seen_questions.add(qa['question'])
-                print(f"✅ {i+1}/{count}: {qa['question'][:60]}...")
+                print(f"✅ {len(qa_pairs)}/{count}: {qa['question'][:60]}...")
             else:
                 print("⚠️ Duplicate or unrecognized format")
         else:
             print("❌ No output")
+
+    if len(qa_pairs) < count:
+        print(f"\n⚠️ Only collected {len(qa_pairs)} valid pairs after {attempts} attempts.")
+
     return qa_pairs
 
 # Save to a daily file per key
