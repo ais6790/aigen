@@ -3,21 +3,35 @@ import json
 import random
 import time
 from datetime import datetime
-import google.generativeai as genai
 
-from google.colab import drive
-drive.mount('/content/drive')
+# Optional: For Google Colab Drive mounting
+try:
+    import google.colab
+    from google.colab import drive
+    drive.mount('/content/drive')
+    SAVE_PATH = "/content/drive/MyDrive/aigen/daily_dumps"
+    print("✅ Running in Colab, Drive mounted.")
+except ImportError:
+    SAVE_PATH = "./daily_dumps"
+    print("⚠️ Not in Colab, saving locally.")
 
-# Configure your API keys
+# Install/Import Google Gemini SDK
+try:
+    import google.generativeai as genai
+except ImportError:
+    print("Installing google-generativeai...")
+    os.system("pip install --upgrade google-generativeai")
+    import google.generativeai as genai
+
+# Rotate multiple API keys
 API_KEYS = [
     "AIzaSyBmCTbbAZLWB30sJBpo5PrXCEVWFaBpzcA",
     "AIzaSyDxO8BQjC_z4rS2V6tI5iyHAF-pAFzIj14"
 ]
 genai.configure(api_key=random.choice(API_KEYS))
-model = genai.GenerativeModel("gemini-pro")
 
-# Set path in your mounted Google Drive
-SAVE_PATH = "/content/drive/MyDrive/aigen/daily_dumps"
+# Use updated Gemini model
+MODEL_NAME = "models/gemini-1.5-pro"
 
 # Generate diverse prompts
 def generate_prompt():
@@ -28,7 +42,7 @@ def generate_prompt():
     ])
     return f"Give a {level} question and answer on {topic} suitable for training an AI model. Format like:\nQuestion: ...\nAnswer: ..."
 
-# Parse raw response
+# Extract Q/A from text
 def parse_response(text):
     try:
         lines = text.strip().splitlines()
@@ -43,17 +57,16 @@ def parse_response(text):
         print("❌ Parse error:", e)
     return None
 
-# Call Gemini and parse
+# Call Gemini API
 def fetch_qa(prompt, retries=3):
     for _ in range(retries):
         try:
-            res = model.generate_content(prompt)
-            if res and res.text:
-                parsed = parse_response(res.text)
-                if parsed:
-                    return parsed
+            model = genai.GenerativeModel(MODEL_NAME)
+            response = model.generate_content(prompt)
+            if response and response.text:
+                return parse_response(response.text)
         except Exception as e:
-            print(f"⚠️ Error: {e}")
+            print("⚠️ Error:", e)
             time.sleep(2)
     return None
 
@@ -65,13 +78,13 @@ def collect(n=1000):
         qa = fetch_qa(prompt)
         if qa:
             dataset.append(qa)
-            print(f"✅ {i+1}/{n} collected.")
+            print(f"✅ {i+1}/{n} collected")
         else:
             print(f"❌ Failed {i+1}/{n}")
-        time.sleep(random.uniform(1.2, 2.2))
+        time.sleep(random.uniform(1.1, 1.9))
     return dataset
 
-# Save to Drive as JSON
+# Save to file
 def save_dataset(data):
     if not data:
         print("⚠️ Nothing to save.")
@@ -86,7 +99,7 @@ def save_dataset(data):
     except Exception as e:
         print(f"❌ Save failed: {e}")
 
-# Run the pipeline
+# Main runner
 if __name__ == "__main__":
     data = collect(1000)
     save_dataset(data)
