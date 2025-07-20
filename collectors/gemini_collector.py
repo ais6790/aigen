@@ -22,28 +22,34 @@ MAX_RETRIES = 3
 RETRY_SLEEP = 2
 SAVE_BASE = "/content/drive/MyDrive/aigen/daily_dumps"
 
-# Helper to rotate API keys
+# Set the Gemini API key from config
 
 def set_api_key(key_name):
     genai.configure(api_key=API_KEYS[key_name])
 
-# Dynamic prompt generator
+# Generate varied prompts dynamically
 
 def generate_self_prompt():
     topics = [
         "AI ethics", "data structures", "algorithms", "startups",
         "psychology", "philosophy", "economics", "education",
         "technology", "machine learning", "deep learning", "code debugging",
-        "creative writing", "social scenarios", "history"
+        "creative writing", "social scenarios", "history", "law", "medicine"
     ]
     topic = random.choice(topics)
-    prompt = f"Generate a high-quality question about {topic} and provide a detailed answer."
-    return prompt
+    style = random.choice([
+        "Generate a thoughtful question about",
+        "Create a challenging question in the domain of",
+        "Write a deep question and answer about",
+        "Pose a creative question on",
+        "Formulate an advanced prompt based on"
+    ])
+    return f"{style} {topic}. Provide a detailed answer."
 
-# Generate one QA pair
+# Generate content from Gemini
 
 def fetch_qa(prompt, retries=MAX_RETRIES):
-    for attempt in range(retries):
+    for _ in range(retries):
         try:
             model = genai.GenerativeModel(MODEL_NAME)
             response = model.generate_content(prompt)
@@ -54,7 +60,7 @@ def fetch_qa(prompt, retries=MAX_RETRIES):
             time.sleep(RETRY_SLEEP)
     return None
 
-# Extract Q and A from response
+# Parse Q&A format from Gemini output
 
 def split_qa(text):
     if "Answer:" in text:
@@ -71,7 +77,7 @@ def split_qa(text):
         }
     return None
 
-# Collect multiple QA pairs for a specific key
+# Collect and deduplicate QA pairs
 
 def collect(key_name, count=1000):
     print(f"\n🚀 Collecting {count} QA pairs using {key_name}...")
@@ -94,7 +100,7 @@ def collect(key_name, count=1000):
             print("❌ No output")
     return qa_pairs
 
-# Save dataset to key-specific folder with today's date
+# Save to a daily file per key
 
 def save_dataset(data, key_name):
     date_str = datetime.now().strftime("%Y-%m-%d")
@@ -103,8 +109,3 @@ def save_dataset(data, key_name):
     with open(out_path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
     print(f"\n💾 Saved {len(data)} QA pairs to {out_path}")
-
-# Run this file from Colab like this:
-# from gemini_collector import collect, save_dataset
-# data = collect("key1", 1000)
-# save_dataset(data, "key1")
