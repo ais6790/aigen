@@ -1,77 +1,98 @@
 import os
+import random
 import time
 import json
-from google.colab import drive
-from datetime import datetime
-from tqdm import tqdm
-import google.generativeai as genai
-import google.api_core.exceptions as gexc
 
-# ✅ Mount Google Drive
-if not os.path.exists('/content/drive'):
-    print("⛔ Drive not available, make sure you're in Colab.")
-else:
-    drive.mount('/content/drive')
-    print("✅ Google Drive mounted.")
+# Install and import required packages
+try:
+    import google.generativeai as genai
+except ImportError:
+    os.system("pip install -q google-generativeai")
+    import google.generativeai as genai
 
-# 🔑 Your API keys
+# Detect if running in Google Colab
+try:
+    from google.colab import drive
+    IN_COLAB = True
+except ImportError:
+    IN_COLAB = False
+
+# Mount Google Drive (for Colab)
+if IN_COLAB:
+    drive.mount('/content/drive', force_remount=True)
+    print("✅ Running in Colab, Drive mounted.")
+
+# Gemini API Configuration
 API_KEYS = [
-    "AIzaSyC_meFvwj7O-r_vH-s9OaM8VnLGUFY1478"
+    "AIzaSyC_meFvwj7O-r_vH-s9OaM8VnLGUFY1478",
+    "AIzaSyDxO8BQjC_z4rS2V6tI5iyHAF-pAFzIj14"
 ]
 
-# 📁 Output directory
-output_dir = '/content/drive/MyDrive/aigen_collector_output'
-os.makedirs(output_dir, exist_ok=True)
+MODEL_NAME = "gemini-1.5-pro"
+TEMPERATURE = 0.8
+MAX_RETRIES = 3
+RETRY_SLEEP = 2  # seconds between retries
 
-def try_with_key(api_key, prompt):
-    try:
-        genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-1.5-pro')
-        response = model.generate_content(prompt)
-        return response.text.strip()
-    except gexc.ResourceExhausted as e:
-        print(f"❌ Quota exceeded for key: {api_key}")
-        raise e
-    except Exception as e:
-        print(f"⚠️ Error with key {api_key}: {e}")
-        raise e
+PROMPT_POOL = [
+    "Write a unique and insightful machine learning interview question and its detailed answer.",
+    "Generate a high-quality startup founder case study question and model answer.",
+    "Create a thoughtful ethical dilemma question related to artificial intelligence, with a sample answer.",
+    "Give a complex real-world scenario that requires a creative algorithmic solution, along with the reasoning.",
+    "Design a speculative yet grounded question about AI's future impact on society, and answer it."
+]
 
-def collect(n=10, delay=2):
-    results = []
-    current_key_index = 0
-    total_keys = len(API_KEYS)
+def set_random_key():
+    key = random.choice(API_KEYS)
+    genai.configure(api_key=key)
 
-    for i in tqdm(range(n), desc="🔄 Collecting"):
-        prompt = f"Generate a short creative writing prompt {i + 1}"
-        success = False
+def fetch_qa(prompt, retries=MAX_RETRIES):
+    for attempt in range(retries):
+        try:
+            set_random_key()
+            model = genai.GenerativeModel(MODEL_NAME)
+            response = model.generate_content(prompt)
+            if response and response.text:
+                return response.text.strip()
+        except Exception as e:
+            print(f"⚠️ Error: {e}")
+            time.sleep(RETRY_SLEEP)
+    return None
 
-        for attempt in range(total_keys):
-            key = API_KEYS[current_key_index]
-            try:
-                text = try_with_key(key, prompt)
-                results.append({'id': i + 1, 'prompt': prompt, 'response': text})
-                success = True
-                break
-            except gexc.ResourceExhausted:
-                current_key_index = (current_key_index + 1) % total_keys
-                time.sleep(1)
-            except Exception as e:
-                print(f"❌ Unhandled error: {e}")
-                break
+def split_qa(text):
+    if "Answer:" in text:
+        parts = text.split("Answer:", 1)
+        return {
+            "question": parts[0].replace("Question:", "").strip(),
+            "answer": parts[1].strip()
+        }
+    elif "Q:" in text and "A:" in text:
+        parts = text.split("A:", 1)
+        return {
+            "question": parts[0].replace("Q:", "").strip(),
+            "answer": parts[1].strip()
+        }
+    else:
+        return None
 
-        if not success:
-            results.append({'id': i + 1, 'prompt': prompt, 'response': None, 'error': 'All keys failed'})
-        time.sleep(delay)
+def collect(n=10):
+    qa_pairs = []
+    for i in range(n):
+        prompt = random.choice(PROMPT_POOL)
+        print(f"\n🧠 Prompt {i+1}/{n}: {prompt}")
+        output = fetch_qa(prompt)
+        if output:
+            qa = split_qa(output)
+            if qa:
+                qa_pairs.append(qa)
+                print(f"✅ {i+1}/{n} collected")
+            else:
+                print("⚠️ Could not parse QA")
+        else:
+            print("❌ Failed to fetch content")
+    return qa_pairs
 
-    return results
-
-# ✅ Start collecting
-data = collect(n=10, delay=2)
-
-# ✅ Save to Drive
-timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-output_path = os.path.join(output_dir, f'gemini_collected_{timestamp}.json')
-with open(output_path, 'w') as f:
-    json.dump(data, f, indent=2)
-
-print(f"\n✅ Saved {len(data)} items to:\n{output_path}")
+def save_dataset(data, output_path="/content/drive/MyDrive/aigen/qa_dataset.json"):
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    with open(output_path, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
+    print(f"\n📁 Saved {len(data)} QA pairs to {output_path}")
