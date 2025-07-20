@@ -16,8 +16,7 @@ else:
 
 # 🔑 Your API keys
 API_KEYS = [
-    "AIzaSyBmCTbbAZLWB30sJBpo5PrXCEVWFaBpzcA",
-    "AIzaSyDxO8BQjC_z4rS2V6tI5iyHAF-pAFzIj14"
+    "AIzaSyC_meFvwj7O-r_vH-s9OaM8VnLGUFY1478"
 ]
 
 # 📁 Output directory
